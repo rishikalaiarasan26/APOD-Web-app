@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>APOD — Local Viewer</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+      <style>
+        :root{--bg:#0b1020;--panel:#0f1630;--ink:#eaf2ff;--muted:#9cb3d9;--accent:#5ad0ff}
+        *{box-sizing:border-box}
+        body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0a0f27,#0b1020 30%,#0b1020);color:var(--ink)}
+        header{padding:20px 18px;display:flex;gap:12px;align-items:center;justify-content:space-between}
+        .wrap{max-width:980px;margin:0 auto;padding:0 18px 28px}
+        .card{background:var(--panel);border:1px solid #1e2b55;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.35);overflow:hidden}
+        .card header{padding:12px 14px;border-bottom:1px solid #1e2b55;display:flex;gap:12px;align-items:center;justify-content:space-between}
+        .card .body{padding:14px}
+        .meta{font-size:12px;color:var(--muted)}
+        img{max-width:100%;border-radius:10px}
+        button{background:#14204a;border:1px solid #2b3f7a;border-radius:10px;color:#def;cursor:pointer;padding:8px 12px}
+        button:hover{filter:brightness(1.1)}
+        input, .btnrow{display:inline-flex;gap:8px;align-items:center}
+        input[type="date"]{background:#0b1431;border:1px solid #2b3f7a;border-radius:8px;color:#def;padding:8px 10px}
+        details{margin-top:8px}
+      </style>
+    </head>
+    <body>
+      <header class="wrap">
+        <h1 style="margin:0;font-size:22px">🌌 APOD — Local Viewer</h1>
+        <div class="meta">Run <code>python server.py</code> → open <code>http://localhost:5000</code></div>
+      </header>
+      <main class="wrap">
+        <article class="card">
+          <header>
+            <div>
+              <strong id="title">Loading…</strong>
+              <div class="meta"><span id="date"></span> • <span id="media"></span></div>
+            </div>
+            <div class="btnrow">
+              <input type="date" id="pickDate"/>
+              <button id="go">Load</button>
+              <button id="download">Download Image</button>
+            </div>
+          </header>
+          <div class="body" id="content">
+            <div class="meta">Fetching APOD…</div>
+          </div>
+        </article>
+      </main>
+
+      <script>
+        let apod = null;
+
+        function todayISO(){
+          const d = new Date();
+          const m = String(d.getMonth()+1).padStart(2,'0');
+          const day = String(d.getDate()).padStart(2,'0');
+          return `${d.getFullYear()}-${m}-${day}`;
+        }
+
+        async function loadAPOD(dateStr){
+          const q = dateStr ? `?date=${dateStr}` : "";
+          const r = await fetch(`/api/apod${q}`);
+          if(!r.ok) throw new Error(`APOD failed: ${r.status}`);
+          apod = await r.json();
+          renderAPOD(apod);
+        }
+
+        function renderAPOD(d){
+          document.getElementById('title').textContent = d.title || 'APOD';
+          document.getElementById('date').textContent = d.date || '';
+          document.getElementById('media').textContent = d.media_type || '';
+          const el = document.getElementById('content');
+
+          if(d.media_type === 'image'){
+            el.innerHTML = `
+              <img src="${d.url}" alt="APOD">
+              <details><summary>Show explanation</summary><p style="margin-top:8px">${d.explanation || ''}</p></details>
+            `;
+          } else {
+            const thumb = d.thumbnail_url ? `<img src="${d.thumbnail_url}" alt="thumbnail" style="margin-top:8px;max-width:360px">` : '';
+            el.innerHTML = `
+              <div class="meta">Today's APOD is a ${d.media_type}. <a href="${d.url}" target="_blank" rel="noreferrer">Open video</a></div>
+              ${thumb}
+              <details><summary>Show explanation</summary><p style="margin-top:8px">${d.explanation || ''}</p></details>
+            `;
+          }
+        }
+
+        async function downloadAPOD(){
+          if(!apod){ return alert("Load APOD first"); }
+          let url = apod.hdurl || apod.url || apod.thumbnail_url;
+          if(!url){ return alert("No downloadable image/thumbnail today."); }
+          const body = JSON.stringify({url, title: apod.title, date: apod.date});
+          const r = await fetch('/api/download', {method:'POST', headers:{'Content-Type':'application/json'}, body});
+          const j = await r.json();
+          if(r.ok){
+            alert('Saved to: ' + j.path);
+          }else{
+            alert('Save failed: ' + (j.error || r.statusText));
+          }
+        }
+
+        document.getElementById('go').addEventListener('click', () => {
+          const d = document.getElementById('pickDate').value;
+          loadAPOD(d);
+        });
+        document.getElementById('download').addEventListener('click', downloadAPOD);
+
+        document.getElementById('pickDate').value = todayISO();
+        loadAPOD();
+      </script>
+    </body>
+    </html>
